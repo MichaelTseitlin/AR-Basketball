@@ -12,6 +12,9 @@ import ARKit
 
 class ViewController: UIViewController, ARSCNViewDelegate {
 
+    private var placeCounter = 0
+    private var isHoofPlaced = false
+    
     @IBOutlet var sceneView: ARSCNView!
     
     override func viewDidLoad() {
@@ -22,12 +25,6 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         
         // Show statistics such as fps and timing information
         sceneView.showsStatistics = true
-        
-        // Create a new scene
-        let scene = SCNScene(named: "art.scnassets/ship.scn")!
-        
-        // Set the scene to the view
-        sceneView.scene = scene
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -35,6 +32,8 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         
         // Create a session configuration
         let configuration = ARWorldTrackingConfiguration()
+        
+        configuration.planeDetection = [.vertical]
 
         // Run the view's session
         sceneView.session.run(configuration)
@@ -46,30 +45,67 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         // Pause the view's session
         sceneView.session.pause()
     }
+}
 
-    // MARK: - ARSCNViewDelegate
+// MARK: - IB Actions
+extension ViewController {
+    @IBAction func screenTaped(_ sender: UITapGestureRecognizer) {
+        if isHoofPlaced {
+            
+        } else {
+            let location = sender.location(in: sceneView)
+            guard let result = sceneView.hitTest(location, types: [.existingPlaneUsingExtent]).first else { return }
+            addHoop(at: result)
+        }
+    }
+}
+
+// MARK: - Custom methods
+extension ViewController {
+    private func addHoop(at result: ARHitTestResult) {
+        let hoofScene = SCNScene(named: "art.scnassets/Hoop.dae")
+        guard let hoopNode = hoofScene?.rootNode.childNode(withName: "Hoop", recursively: false) else { return }
+        
+        hoopNode.simdTransform = result.worldTransform
+        hoopNode.eulerAngles = SCNVector3(0, 0, 0)
+        
+        sceneView.scene.rootNode.enumerateChildNodes { node, _ in
+            if node.name == "Hoop" {
+                node.removeFromParentNode()
+            }
+        }
+        
+        sceneView.scene.rootNode.addChildNode(hoopNode)
+        isHoofPlaced = true
+    }
     
-/*
-    // Override to create and configure nodes for anchors added to the view's session.
-    func renderer(_ renderer: SCNSceneRenderer, nodeFor anchor: ARAnchor) -> SCNNode? {
-        let node = SCNNode()
-     
+    private func createFloor(planeAnchor: ARPlaneAnchor) -> SCNNode {
+        let extent = planeAnchor.extent
+        let width = CGFloat(extent.x)
+        let height = CGFloat(extent.z)
+        
+        let plane = SCNPlane(width: width, height: height)
+        plane.firstMaterial?.diffuse.contents = UIColor.blue
+        
+        let node = SCNNode(geometry: plane)
+        node.eulerAngles.x = -.pi / 2
+        node.opacity = 0.125
+        
         return node
     }
-*/
-    
-    func session(_ session: ARSession, didFailWithError error: Error) {
-        // Present an error message to the user
+}
+
+// MARK: - ARSCNViewDelegate
+extension ViewController {
+    func renderer(_ renderer: SCNSceneRenderer, didUpdate node: SCNNode, for anchor: ARAnchor) {
+        guard let planeAnchor = anchor as? ARPlaneAnchor else { return }
+        guard !isHoofPlaced else { return }
         
-    }
-    
-    func sessionWasInterrupted(_ session: ARSession) {
-        // Inform the user that the session has been interrupted, for example, by presenting an overlay
+        let floor = createFloor(planeAnchor: planeAnchor)
+        floor.name = "Hoop"
+        node.addChildNode(floor)
         
-    }
-    
-    func sessionInterruptionEnded(_ session: ARSession) {
-        // Reset tracking and/or remove existing anchors if consistent tracking is required
-        
+        placeCounter += 1
+        print(placeCounter)
     }
 }
