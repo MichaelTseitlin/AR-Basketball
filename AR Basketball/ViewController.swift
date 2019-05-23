@@ -13,7 +13,7 @@ import ARKit
 class ViewController: UIViewController, ARSCNViewDelegate {
 
     private var placeCounter = 0
-    private var isHoofPlaced = false
+    private var isHoodPlaced = false
     
     @IBOutlet var sceneView: ARSCNView!
     
@@ -50,7 +50,7 @@ class ViewController: UIViewController, ARSCNViewDelegate {
 // MARK: - IB Actions
 extension ViewController {
     @IBAction func screenTaped(_ sender: UITapGestureRecognizer) {
-        if isHoofPlaced {
+        if isHoodPlaced {
             
         } else {
             let location = sender.location(in: sceneView)
@@ -76,7 +76,7 @@ extension ViewController {
         }
         
         sceneView.scene.rootNode.addChildNode(hoopNode)
-        isHoofPlaced = true
+        isHoodPlaced = true
     }
     
     private func createFloor(planeAnchor: ARPlaneAnchor) -> SCNNode {
@@ -99,7 +99,7 @@ extension ViewController {
 extension ViewController {
     func renderer(_ renderer: SCNSceneRenderer, didUpdate node: SCNNode, for anchor: ARAnchor) {
         guard let planeAnchor = anchor as? ARPlaneAnchor else { return }
-        guard !isHoofPlaced else { return }
+        guard !isHoodPlaced else { return }
         
         let floor = createFloor(planeAnchor: planeAnchor)
         floor.name = "Hoop"
