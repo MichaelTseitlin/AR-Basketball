@@ -32,6 +32,7 @@ class ViewController: UIViewController {
         
         // Set the view's delegate
         sceneView.delegate = self
+        sceneView.scene.physicsWorld.contactDelegate = self
         
         // Show statistics such as fps and timing information
         sceneView.showsStatistics = true
@@ -89,6 +90,7 @@ extension ViewController {
         hiddenHoopNode.scale = SCNVector3(0.5, 0.5, 0.5)
         //        hiddenHoopNode.opacity = 0
         
+        
         hiddenHoopNode.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(node: hiddenHoopNode, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
         
         sceneView.scene.rootNode.enumerateChildNodes { node, _ in
@@ -97,7 +99,10 @@ extension ViewController {
             }
         }
         
-        sceneView.scene.physicsWorld.contactDelegate = self
+//        print(hiddenHoopNode.physicsBody?.categoryBitMask)
+//        print(hiddenHoopNode.physicsBody?.contactTestBitMask)
+//        print(hiddenHoopNode.physicsBody?.collisionBitMask)
+
         sceneView.scene.rootNode.addChildNode(hiddenHoopNode)
         sceneView.scene.rootNode.addChildNode(hoopNode)
         isHoodPlaced = true
@@ -146,15 +151,13 @@ extension ViewController {
     }
     
     private func setupCheckNodes(hiddenHoopNode: SCNNode) {
-        guard let ringNode = hiddenHoopNode.childNode(withName: "ring", recursively: false) else { return }
-        
-        guard let nodeA = ringNode.childNode(withName: "nodeA", recursively: false) else { return }
+        guard let nodeA = hiddenHoopNode.childNode(withName: "nodeA", recursively: false) else { return }
         nodeA.name = "nodeA"
-        nodeA.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: nodeA.geometry!))
+        nodeA.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: nodeA.geometry!, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
         
-        guard let nodeB = ringNode.childNode(withName: "nodeB", recursively: false) else { return }
+        guard let nodeB = hiddenHoopNode.childNode(withName: "nodeB", recursively: false) else { return }
         nodeB.name = "nodeB"
-        nodeB.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: nodeB.geometry!))
+        nodeB.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: nodeB.geometry!, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
         
         nodeA.physicsBody?.categoryBitMask = Int(topCheckerCategory)
         nodeA.physicsBody?.collisionBitMask = Int(ballCategory)
