@@ -10,22 +10,24 @@ import UIKit
 import SceneKit
 import ARKit
 
+enum CategoriesBitMask: Int {
+    case none = 0b0000
+    case ball = 0b0100
+    case hoop = 0b1111
+}
+
 class ViewController: UIViewController {
     
-    private let noneCategory = 0
-    private let ballCategory:UInt32 = 0x1 << 0 // 1
-    private let topCheckerCategory: UInt32 = 0x1 << 1 // 2
-    private let bottomChekerCategory: UInt32 = 0x1 << 2 // 4
-    
-    private var countBeginnings = 0
-    private var countEndings = 0
+    private var goalCounter = 0
+    private var totalBallsCounter = 0
     
     private var placeCounter = 0
     private var isHoodPlaced = false
-    private var ballCollusion = false
-    private var resultCollusion = false
     
     @IBOutlet var sceneView: ARSCNView!
+    
+    @IBOutlet var goalsLabel: UILabel!
+    @IBOutlet var totalBalls: UILabel!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -36,8 +38,6 @@ class ViewController: UIViewController {
         
         // Show statistics such as fps and timing information
         sceneView.showsStatistics = true
-        
-        sceneView.debugOptions = [.showWorldOrigin, .showFeaturePoints]
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -76,22 +76,31 @@ extension ViewController {
 // MARK: - Custom methods
 extension ViewController {
     private func addHoop(at result: ARHitTestResult) {
+        
         let hoofScene = SCNScene(named: "art.scnassets/Hoop.scn")
+        
         guard let hoopNode = hoofScene?.rootNode.childNode(withName: "Hoop", recursively: false) else { return }
+        
         guard let hiddenHoopNode = hoofScene?.rootNode.childNode(withName: "HiddenHoop", recursively: false) else { return }
         
-        setupCheckNodes(hiddenHoopNode: hiddenHoopNode)
+        guard let ringNode = hiddenHoopNode.childNode(withName: "ring", recursively: false) else { return }
+        
+        let ringPosition = ringNode.position
         
         hoopNode.simdTransform = result.worldTransform
-        hoopNode.eulerAngles = SCNVector3(0, 0, 0)
+        hoopNode.eulerAngles.x -= .pi / 2
         
         hiddenHoopNode.simdTransform = result.worldTransform
-        hiddenHoopNode.eulerAngles = SCNVector3(0, 0, 0)
+        hiddenHoopNode.eulerAngles.x -= .pi / 2
         hiddenHoopNode.scale = SCNVector3(0.5, 0.5, 0.5)
-        //        hiddenHoopNode.opacity = 0
-        
+        hiddenHoopNode.opacity = 0
         
         hiddenHoopNode.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(node: hiddenHoopNode, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
+        
+        hiddenHoopNode.physicsBody?.categoryBitMask = CategoriesBitMask.hoop.rawValue
+        hiddenHoopNode.physicsBody?.collisionBitMask = CategoriesBitMask.hoop.rawValue
+        hiddenHoopNode.physicsBody?.contactTestBitMask = CategoriesBitMask.none.rawValue
+        
         
         sceneView.scene.rootNode.enumerateChildNodes { node, _ in
             if node.name == "Hoop" {
@@ -99,10 +108,8 @@ extension ViewController {
             }
         }
         
-//        print(hiddenHoopNode.physicsBody?.categoryBitMask)
-//        print(hiddenHoopNode.physicsBody?.contactTestBitMask)
-//        print(hiddenHoopNode.physicsBody?.collisionBitMask)
-
+        settingGoalChekers(for: hiddenHoopNode, with: ringPosition)
+        
         sceneView.scene.rootNode.addChildNode(hiddenHoopNode)
         sceneView.scene.rootNode.addChildNode(hoopNode)
         isHoodPlaced = true
@@ -121,9 +128,9 @@ extension ViewController {
         let physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(node: ball))
         ball.physicsBody = physicsBody
         
-        ball.physicsBody?.categoryBitMask = Int(ballCategory)
-        ball.physicsBody?.contactTestBitMask = Int(topCheckerCategory) | Int(bottomChekerCategory) | Int(ballCategory)
-        ball.physicsBody?.collisionBitMask = Int(topCheckerCategory) | Int(bottomChekerCategory) | Int(ballCategory)
+        ball.physicsBody?.categoryBitMask = CategoriesBitMask.ball.rawValue
+        ball.physicsBody?.collisionBitMask = CategoriesBitMask.ball.rawValue
+        ball.physicsBody?.contactTestBitMask = CategoriesBitMask.none.rawValue
         
         let power = Float(5)
         let x = -cameraTransform.m31 * power
@@ -131,6 +138,9 @@ extension ViewController {
         let z = -cameraTransform.m33 * power
         let force = SCNVector3(x, y, z)
         ball.physicsBody?.applyForce(force, asImpulse: true)
+        
+        totalBallsCounter += 1
+        totalBalls.text = "Out of: \(totalBallsCounter)"
         
         sceneView.scene.rootNode.addChildNode(ball)
     }
@@ -150,22 +160,36 @@ extension ViewController {
         return node
     }
     
-    private func setupCheckNodes(hiddenHoopNode: SCNNode) {
-        guard let nodeA = hiddenHoopNode.childNode(withName: "nodeA", recursively: false) else { return }
-        nodeA.name = "nodeA"
-        nodeA.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: nodeA.geometry!, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
+    private func settingGoalChekers(for node: SCNNode, with position: SCNVector3 ) {
+        let topChecker = createCheker()
+        topChecker.name = "topChecker"
+        node.addChildNode(topChecker)
+        node.childNode(withName: "topChecker", recursively: false)?.position = SCNVector3(position.x,
+                                                                                          position.y + 0.3,
+                                                                                          position.z)
         
-        guard let nodeB = hiddenHoopNode.childNode(withName: "nodeB", recursively: false) else { return }
-        nodeB.name = "nodeB"
-        nodeB.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: nodeB.geometry!, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
+        let bottomChecker = createCheker()
+        bottomChecker.name = "bottomChecker"
+        node.addChildNode(bottomChecker)
+        node.childNode(withName: "bottomChecker", recursively: false)?.position = SCNVector3(position.x,
+                                                                                             position.y - 0.3,
+                                                                                             position.z)
         
-        nodeA.physicsBody?.categoryBitMask = Int(topCheckerCategory)
-        nodeA.physicsBody?.collisionBitMask = Int(ballCategory)
-        nodeA.physicsBody?.contactTestBitMask = Int(ballCategory)
-        nodeB.physicsBody?.categoryBitMask = Int(bottomChekerCategory)
-        nodeB.physicsBody?.contactTestBitMask = Int(ballCategory)
-        nodeB.physicsBody?.collisionBitMask = Int(ballCategory)
+    }
+    
+    private func createCheker() -> SCNNode {
         
+        let plane = SCNNode(geometry: SCNPlane(width: 0.25, height: 0.25))
+        plane.geometry?.firstMaterial?.diffuse.contents = UIColor.clear
+        plane.eulerAngles.x = -.pi / 2
+        
+        let body = SCNPhysicsBody(type: .kinematic, shape: SCNPhysicsShape(node: plane))
+        plane.physicsBody = body
+        plane.physicsBody?.categoryBitMask = CategoriesBitMask.none.rawValue
+        plane.physicsBody?.collisionBitMask = CategoriesBitMask.none.rawValue
+        plane.physicsBody?.contactTestBitMask = CategoriesBitMask.ball.rawValue
+        
+        return plane
     }
 }
 
@@ -183,34 +207,29 @@ extension ViewController: ARSCNViewDelegate {
     }
 }
 
+// MARK: - SCNPhysicsContactDelegate
 extension ViewController: SCNPhysicsContactDelegate {
     
     func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
-        //        print(#line, #function, "WORK")
-        print("NodeA:", contact.nodeA.name)
-        print("NodeB:", contact.nodeB.name)
         
-        if ballCollusion == false {
-            if (contact.nodeA.name! == "ball" && contact.nodeB.name! == "nodeA") {
-                ballCollusion.toggle()
-                print(#line, #function, "ballColliusstion = true")
-            }
+        let nodeA = contact.nodeA
+        let nodeB = contact.nodeB
+        
+        let nameA = nodeA.name
+        let nameB = nodeB.name
+        
+        if nameA == "topChecker", nameB == "ball" {
+            nodeB.name = "topChekerIsPassed"
         }
         
-        if (ballCollusion == true) && (resultCollusion == false) {
-            if (contact.nodeA.name! == "ball" && contact.nodeB.name! == "nodeA") {
-                ballCollusion.toggle()
-                print(#line, #function, "SCORES +1")
+        if nameA == "bottomChecker", nameB == "topChekerIsPassed" {
+            nodeB.name = "Goal"
+            
+            goalCounter += 1
+            
+            DispatchQueue.main.async {
+                self.goalsLabel.text = "Hits: \(self.goalCounter)"
             }
         }
-    }
-    
-    func physicsWorld(_ world: SCNPhysicsWorld, didEnd contact: SCNPhysicsContact) {
-        //        countEndings += 1
-        //        print(#line, #function, "YES!")
-        
-        //        print("(" + String(countEndings) + ") " + contact.nodeA.name! + " ended contact with " + contact.nodeB.name!)
     }
 }
-
-
